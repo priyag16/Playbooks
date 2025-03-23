@@ -1,0 +1,53 @@
+---
+- name: Enable timestamp for root user on reachable servers
+  hosts: all
+  gather_facts: no
+  become: yes
+
+  tasks:
+    - name: Check if server is reachable
+      ping:
+      register: ping_result
+      ignore_errors: yes
+
+    - name: Handle unreachable servers
+      when: ping_result.failed
+      block:
+        - name: Log unreachable server to timestamp.error.log
+          local_action:
+            module: copy
+            content: "{{ inventory_hostname }} is unreachable\n"
+            dest: /path/to/timestamp.error.log
+            append: yes
+
+    - name: Enable timestamp for root user on reachable servers
+      when: not ping_result.failed
+      block:
+        - name: Ensure root user has timestamp enabled
+          lineinfile:
+            path: /etc/bash.bashrc
+            regexp: '^# HISTTIMEFORMAT'
+            line: 'HISTTIMEFORMAT="%F %T "'
+            state: present
+
+        - name: Verify if the timestamp is enabled for root
+          command: grep HISTTIMEFORMAT /etc/bash.bashrc
+          register: timestamp_check
+          failed_when: timestamp_check.rc != 0
+          ignore_errors: yes
+
+        - name: Log success to timestamp.success.log
+          when: timestamp_check.rc == 0
+          local_action:
+            module: copy
+            content: "{{ inventory_hostname }}: Timestamp enabled successfully\n"
+            dest: /path/to/timestamp.success.log
+            append: yes
+
+        - name: Log failure to timestamp.error.log
+          when: timestamp_check.rc != 0
+          local_action:
+            module: copy
+            content: "{{ inventory_hostname }}: Failed to enable timestamp\n"
+            dest: /path/to/timestamp.error.log
+            append: yes
